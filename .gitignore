@@ -216,3 +216,17 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# KubeSentinel additions
+.venv/
+.env
+.env.local
+*.pem
+*.key
+kubeconfig
+.claude/settings.local.json
+.mcp.local.json
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.log

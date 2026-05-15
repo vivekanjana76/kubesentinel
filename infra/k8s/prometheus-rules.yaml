@@ -16,7 +16,7 @@ spec:
         - alert: HighErrorRate
           expr: |
             (
-              sum(rate(http_requests_total{namespace="kubesentinel", status=~"5.."}[1m]))
+              sum(rate(http_requests_total{namespace="kubesentinel", status_code=~"5.."}[1m]))
               /
               sum(rate(http_requests_total{namespace="kubesentinel"}[1m]))
             ) > 0.1

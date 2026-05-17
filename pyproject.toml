@@ -52,6 +52,9 @@ ignore = ["E501"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
+[tool.hatch.build.targets.wheel]
+packages = ["agent", "app"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

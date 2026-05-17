@@ -7,13 +7,23 @@
 # Tested on Windows PowerShell 5.1 (built-in on Windows 10/11) and PowerShell 7.
 #
 # PS 5.1 stderr caveat:
-#   `2>$null` does NOT fully suppress stderr from native executables. PS 5.1 wraps
-#   each native stderr line as a NativeCommandError; with $ErrorActionPreference = "Stop"
-#   these halt the script even when the exit code is 0.
-#   Workaround used here: capture both streams with `2>&1`, then filter by object type.
-#   Stderr arrives as [System.Management.Automation.ErrorRecord]; stdout as plain [string].
-#     $out = & some-cli 2>&1
+#   With $ErrorActionPreference = "Stop", PS 5.1 wraps every native-command stderr
+#   line as a NativeCommandError and halts the script — even when the process exit
+#   code is 0. Tools like kind, kubectl, helm, and docker routinely write informational
+#   text to stderr, so this fires constantly.
+#
+#   Fix: Invoke-Native temporarily scopes $ErrorActionPreference = "Continue" around
+#   each native invocation so NativeCommandErrors are written to the error stream but
+#   do not terminate the script. 2>&1 in the helper merges stderr into the output
+#   stream as strings, giving callers a uniform [string] stream to inspect or display.
+#   This pattern is safe on both PS 5.1 and PS 7.
+#
+#   Pattern for calls where output is inspected:
+#     $out     = Invoke-Native { some-cli args }
 #     $strings = $out | Where-Object { $_ -is [string] }
+#
+#   Pattern for fire-and-forget calls (output streams to terminal):
+#     Invoke-Native { some-cli args }
 
 param(
     [Parameter(Position = 0, Mandatory = $true)]
@@ -33,56 +43,71 @@ $HelmRelease   = "kube-prometheus-stack"
 $HelmChart     = "prometheus-community/kube-prometheus-stack"
 $HelmNamespace = "monitoring"
 
+# Runs a native command with $ErrorActionPreference temporarily set to "Continue" so
+# PS 5.1 does not raise a terminating NativeCommandError on informational stderr.
+# 2>&1 merges stderr into the output stream; callers receive a uniform [string] stream.
+function Invoke-Native {
+    param([scriptblock]$ScriptBlock)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & $ScriptBlock 2>&1
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+}
+
 function Invoke-ClusterCreate {
     Write-Host "==> Creating Kind cluster..." -ForegroundColor Cyan
-    # Use 2>&1 so PS 5.1 doesn't raise a NativeCommandError when no clusters exist.
-    # kind writes "No kind clusters found." to stderr; filtering to [string] objects
-    # gives only actual cluster names from stdout.
-    $clusterOutput = & kind get clusters 2>&1
-    $existing = $clusterOutput | Where-Object { $_ -is [string] -and $_ -eq $ClusterName }
+    $clusterOutput = Invoke-Native { kind get clusters }
+    $strings = $clusterOutput | Where-Object { $_ -is [string] }
+    Write-Host "Found clusters: $($strings -join ', ')" -ForegroundColor DarkGray
+    $existing = $strings | Where-Object { $_ -eq $ClusterName }
     if ($existing) {
         Write-Host "Cluster '$ClusterName' already exists, skipping." -ForegroundColor Yellow
     } else {
-        kind create cluster --config infra/kind/cluster.yaml --name $ClusterName
+        Invoke-Native { kind create cluster --config infra/kind/cluster.yaml --name $ClusterName }
     }
-    kubectl cluster-info --context "kind-$ClusterName"
+    Invoke-Native { kubectl cluster-info --context "kind-$ClusterName" }
 }
 
 function Invoke-ImageBuild {
     Write-Host "==> Building sacrificial app image..." -ForegroundColor Cyan
-    docker build -t "${ImageName}:${ImageTag}" app/sacrificial/
+    Invoke-Native { docker build -t "${ImageName}:${ImageTag}" app/sacrificial/ }
 }
 
 function Invoke-ImageLoad {
     Write-Host "==> Loading image into Kind..." -ForegroundColor Cyan
-    kind load docker-image "${ImageName}:${ImageTag}" --name $ClusterName
+    Invoke-Native { kind load docker-image "${ImageName}:${ImageTag}" --name $ClusterName }
 }
 
 function Invoke-HelmInstall {
     Write-Host "==> Adding prometheus-community Helm repo..." -ForegroundColor Cyan
-    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-    helm repo update
+    Invoke-Native { helm repo add prometheus-community https://prometheus-community.github.io/helm-charts }
+    Invoke-Native { helm repo update }
 
     Write-Host "==> Creating monitoring namespace..." -ForegroundColor Cyan
-    kubectl create namespace $HelmNamespace --dry-run=client -o yaml | kubectl apply -f -
+    Invoke-Native { kubectl create namespace $HelmNamespace --dry-run=client -o yaml | kubectl apply -f - }
 
     Write-Host "==> Installing kube-prometheus-stack (this takes ~5 minutes)..." -ForegroundColor Cyan
-    helm upgrade --install $HelmRelease $HelmChart `
-        --namespace $HelmNamespace `
-        --values infra/helm/values.yaml `
-        --wait --timeout 10m
+    Invoke-Native {
+        helm upgrade --install $HelmRelease $HelmChart `
+            --namespace $HelmNamespace `
+            --values infra/helm/values.yaml `
+            --wait --timeout 10m
+    }
 }
 
 function Invoke-ManifestsApply {
     Write-Host "==> Applying Kubernetes manifests..." -ForegroundColor Cyan
-    kubectl apply -f infra/k8s/namespace.yaml
-    kubectl apply -f infra/k8s/sacrificial-deployment.yaml
-    kubectl apply -f infra/k8s/sacrificial-service.yaml
-    kubectl apply -f infra/k8s/sacrificial-servicemonitor.yaml
-    kubectl apply -f infra/k8s/prometheus-rules.yaml
+    Invoke-Native { kubectl apply -f infra/k8s/namespace.yaml }
+    Invoke-Native { kubectl apply -f infra/k8s/sacrificial-deployment.yaml }
+    Invoke-Native { kubectl apply -f infra/k8s/sacrificial-service.yaml }
+    Invoke-Native { kubectl apply -f infra/k8s/sacrificial-servicemonitor.yaml }
+    Invoke-Native { kubectl apply -f infra/k8s/prometheus-rules.yaml }
 
     Write-Host "==> Waiting for sacrificial deployment to be ready..." -ForegroundColor Cyan
-    kubectl rollout status deployment/sacrificial -n $Namespace --timeout=120s
+    Invoke-Native { kubectl rollout status deployment/sacrificial -n $Namespace --timeout=120s }
 }
 
 function Invoke-Up {
@@ -102,28 +127,28 @@ function Invoke-Up {
 
 function Invoke-Down {
     Write-Host "==> Deleting Kind cluster..." -ForegroundColor Cyan
-    kind delete cluster --name $ClusterName
+    Invoke-Native { kind delete cluster --name $ClusterName }
 }
 
 function Invoke-Status {
     Write-Host "==> Cluster nodes:" -ForegroundColor Cyan
-    kubectl get nodes
+    Invoke-Native { kubectl get nodes }
     Write-Host ""
     Write-Host "==> All pods:" -ForegroundColor Cyan
-    kubectl get pods -A
+    Invoke-Native { kubectl get pods -A }
     Write-Host ""
     Write-Host "==> Services in ${Namespace}:" -ForegroundColor Cyan
-    kubectl get svc -n $Namespace
+    Invoke-Native { kubectl get svc -n $Namespace }
     Write-Host ""
     Write-Host "==> Prometheus alert rules:" -ForegroundColor Cyan
-    kubectl get prometheusrule -n $Namespace
+    Invoke-Native { kubectl get prometheusrule -n $Namespace }
     Write-Host ""
     Write-Host "Tip: open http://localhost:9090/alerts to see firing alerts." -ForegroundColor Yellow
 }
 
 function Invoke-LogsApp {
     Write-Host "==> Tailing sacrificial app logs..." -ForegroundColor Cyan
-    kubectl logs -n $Namespace -l app=sacrificial -f --prefix
+    Invoke-Native { kubectl logs -n $Namespace -l app=sacrificial -f --prefix }
 }
 
 function Invoke-LogsWebhook {
@@ -139,14 +164,15 @@ function Invoke-WebhookDev {
     Write-Host "==> Starting webhook receiver on port 8000 (reload enabled)..." -ForegroundColor Cyan
     if (-not (Test-Path ".venv")) {
         Write-Host "Creating virtual environment..." -ForegroundColor Yellow
-        py -3.12 -m venv .venv
-        .venv\Scripts\pip install -r requirements.txt
+        Invoke-Native { py -3.12 -m venv .venv }
+        Invoke-Native { .venv\Scripts\pip install -r requirements.txt }
     }
-    .venv\Scripts\uvicorn agent.webhook:app --reload --host 0.0.0.0 --port 8000
+    Invoke-Native { .venv\Scripts\uvicorn agent.webhook:app --reload --host 0.0.0.0 --port 8000 }
 }
 
 function Invoke-BreakApp {
     Write-Host "==> Starting port-forward to sacrificial app on localhost:8080..." -ForegroundColor Cyan
+    # Start-Process is a PS cmdlet (not a native command) — no Invoke-Native needed.
     $pf = Start-Process -FilePath "kubectl" `
         -ArgumentList "port-forward -n $Namespace svc/sacrificial 8080:80" `
         -PassThru -WindowStyle Hidden

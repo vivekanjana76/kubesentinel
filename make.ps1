@@ -1,6 +1,19 @@
 # KubeSentinel PowerShell script — equivalent to Makefile targets
 # Usage: .\make.ps1 <target>
 # Example: .\make.ps1 up
+#
+# Compatibility
+# -------------
+# Tested on Windows PowerShell 5.1 (built-in on Windows 10/11) and PowerShell 7.
+#
+# PS 5.1 stderr caveat:
+#   `2>$null` does NOT fully suppress stderr from native executables. PS 5.1 wraps
+#   each native stderr line as a NativeCommandError; with $ErrorActionPreference = "Stop"
+#   these halt the script even when the exit code is 0.
+#   Workaround used here: capture both streams with `2>&1`, then filter by object type.
+#   Stderr arrives as [System.Management.Automation.ErrorRecord]; stdout as plain [string].
+#     $out = & some-cli 2>&1
+#     $strings = $out | Where-Object { $_ -is [string] }
 
 param(
     [Parameter(Position = 0, Mandatory = $true)]
@@ -22,7 +35,11 @@ $HelmNamespace = "monitoring"
 
 function Invoke-ClusterCreate {
     Write-Host "==> Creating Kind cluster..." -ForegroundColor Cyan
-    $existing = kind get clusters 2>$null | Where-Object { $_ -eq $ClusterName }
+    # Use 2>&1 so PS 5.1 doesn't raise a NativeCommandError when no clusters exist.
+    # kind writes "No kind clusters found." to stderr; filtering to [string] objects
+    # gives only actual cluster names from stdout.
+    $clusterOutput = & kind get clusters 2>&1
+    $existing = $clusterOutput | Where-Object { $_ -is [string] -and $_ -eq $ClusterName }
     if ($existing) {
         Write-Host "Cluster '$ClusterName' already exists, skipping." -ForegroundColor Yellow
     } else {

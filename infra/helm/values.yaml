@@ -55,8 +55,17 @@ alertmanager:
       group_interval: 5m
       repeat_interval: 1h
       receiver: kubesentinel-webhook
+      routes:
+        # Silence the chart's built-in Watchdog heartbeat alert — it is not an
+        # actionable incident. The "null" receiver must be declared even though it
+        # has no configs; Alertmanager validates all receiver references at startup
+        # and will fail reconciliation if the name is missing from the receivers list.
+        - matchers:
+            - alertname = "Watchdog"
+          receiver: "null"
 
     receivers:
+      - name: "null"
       - name: kubesentinel-webhook
         webhook_configs:
           - url: "http://host.docker.internal:8000/webhook/alert"

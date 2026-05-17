@@ -34,9 +34,10 @@ flowchart TD
     AG -->|notification| SL
 ```
 
-**Phase 1** (this branch) delivers everything up to and including the Webhook Receiver.  
-**Phase 2** adds the LangGraph agent core with tool definitions.  
-**Phase 3** wires the agent to the webhook receiver and implements auto-remediation.
+**Phase 1** delivers the Kind cluster, sacrificial app, Prometheus/Alertmanager stack, and webhook receiver.  
+**Phase 2** adds the RAG memory: 8 seed runbooks, Supabase pgvector schema, local BGE embeddings, and the retriever the agent will call.  
+**Phase 3** builds the LangGraph agent core with tool definitions wired to the webhook receiver.  
+**Phase 4** implements auto-remediation and GitHub PR creation.
 
 ---
 
@@ -151,25 +152,87 @@ make down         # Linux/macOS
 ```
 KubeSentinel/
 ├── agent/
-│   └── webhook.py          # Phase 1: stub Alertmanager webhook receiver
+│   ├── webhook.py          # Phase 1: Alertmanager webhook receiver
+│   └── rag/                # Phase 2: RAG memory layer
+│       ├── settings.py     #   pydantic-settings (SUPABASE_URL, DATABASE_URL)
+│       ├── migrations/
+│       │   └── 001_create_runbooks.sql
+│       ├── migrate.py      #   py -3.12 -m agent.rag.migrate
+│       ├── ingest.py       #   py -3.12 -m agent.rag.ingest [--file F] [--dry-run]
+│       ├── retriever.py    #   RunbookRetriever, get_retriever()
+│       └── cli.py          #   py -3.12 -m agent.rag.cli query "..."
 ├── app/sacrificial/        # Deliberately broken FastAPI app
-│   ├── main.py
-│   ├── Dockerfile
-│   ├── pyproject.toml
-│   ├── requirements.txt
-│   └── README.md
-├── infra/
-│   ├── kind/cluster.yaml   # Kind cluster config
-│   ├── k8s/                # Kubernetes manifests
-│   └── helm/values.yaml    # kube-prometheus-stack overrides
 ├── docs/
-│   └── architecture.md     # Detailed architecture doc
-├── tests/                  # pytest suite
-├── Makefile                # Linux/macOS automation
-├── make.ps1                # Windows PowerShell automation
-├── pyproject.toml          # Root Python project (agent package)
-└── requirements.txt        # Compiled by uv
+│   ├── runbooks/           # 8 seed SRE runbooks (RAG source data)
+│   ├── architecture.md
+│   └── rag-architecture.md # Phase 2 RAG design doc
+├── infra/
+│   ├── kind/cluster.yaml
+│   ├── k8s/
+│   └── helm/values.yaml
+├── tests/
+│   └── rag/                # 23 tests: chunker, retriever, ingest
+├── Makefile
+├── make.ps1
+├── pyproject.toml
+└── requirements.txt
 ```
+
+---
+
+## Phase 2: RAG Memory
+
+### Prerequisites
+
+In addition to Phase 1 prerequisites:
+- A [Supabase](https://supabase.com) project with the `pgvector` extension enabled
+- `.env` populated with `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `DATABASE_URL`
+  (see `.env.example` for format; `DATABASE_URL` is the direct Postgres URI from
+  Supabase Dashboard > Project Settings > Database > Connection string)
+
+### 1. Run the schema migration
+
+```powershell
+py -3.12 -m agent.rag.migrate
+```
+
+Creates the `runbooks` table, HNSW cosine index, and `match_runbooks()` function. Idempotent — safe to re-run.
+
+### 2. Ingest the seed runbooks
+
+```powershell
+py -3.12 -m agent.rag.ingest
+```
+
+Chunks all 8 runbooks in `docs/runbooks/`, generates embeddings locally using `BAAI/bge-small-en-v1.5`
+(~130MB download on first run — expected), and upserts into Supabase. Idempotent: re-running skips unchanged chunks.
+
+Ingest a single file:
+```powershell
+py -3.12 -m agent.rag.ingest --file oomkilled-pod.md
+```
+
+Preview chunks without writing:
+```powershell
+py -3.12 -m agent.rag.ingest --dry-run
+```
+
+### 3. Test retrieval
+
+```powershell
+py -3.12 -m agent.rag.cli query "OOMKilled with memory limit 128Mi"
+py -3.12 -m agent.rag.cli query "image not found registry pull error" --k 5
+```
+
+### 4. Run tests
+
+```powershell
+py -3.12 -m pytest tests/rag/ -v
+```
+
+All 23 tests pass. Supabase and the embedding model are fully mocked — no network or GPU needed.
+
+See [docs/rag-architecture.md](docs/rag-architecture.md) for schema design, model rationale, chunking strategy, and a retrieval sequence diagram.
 
 ---
 

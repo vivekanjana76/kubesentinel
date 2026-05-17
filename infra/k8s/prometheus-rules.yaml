@@ -1,0 +1,88 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kubesentinel-rules
+  namespace: kubesentinel
+  labels:
+    app: sacrificial
+    app.kubernetes.io/part-of: kubesentinel
+    # Must match the Helm values.yaml ruleSelector
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: kubesentinel.sacrificial
+      interval: 30s
+      rules:
+        - alert: HighErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_total{namespace="kubesentinel", status_code=~"5.."}[1m]))
+              /
+              sum(rate(http_requests_total{namespace="kubesentinel"}[1m]))
+            ) > 0.1
+          for: 1m
+          labels:
+            severity: warning
+            namespace: kubesentinel
+          annotations:
+            summary: "High 5xx error rate on sacrificial app"
+            description: >
+              More than 10% of requests to the sacrificial app are returning 5xx
+              errors over the past minute.
+              Current rate: {{ $value | humanizePercentage }}.
+
+        - alert: PodCrashLooping
+          expr: |
+            increase(kube_pod_container_status_restarts_total{
+              namespace="kubesentinel"
+            }[5m]) > 3
+          for: 0m
+          labels:
+            severity: critical
+            namespace: kubesentinel
+          annotations:
+            summary: "Pod crash-looping in kubesentinel namespace"
+            description: >
+              Pod {{ $labels.pod }} container {{ $labels.container }} has restarted
+              more than 3 times in the last 5 minutes.
+
+        - alert: HighMemoryUsage
+          expr: |
+            (
+              container_memory_working_set_bytes{
+                namespace="kubesentinel",
+                container="sacrificial"
+              }
+              /
+              container_spec_memory_limit_bytes{
+                namespace="kubesentinel",
+                container="sacrificial"
+              }
+            ) > 0.9
+          for: 1m
+          labels:
+            severity: warning
+            namespace: kubesentinel
+          annotations:
+            summary: "Sacrificial app memory usage above 90% of limit"
+            description: >
+              Container {{ $labels.container }} in pod {{ $labels.pod }} is using
+              {{ $value | humanizePercentage }} of its memory limit (128Mi).
+
+        - alert: HighLatency
+          expr: |
+            histogram_quantile(
+              0.95,
+              sum(rate(http_request_duration_seconds_bucket{
+                namespace="kubesentinel"
+              }[5m])) by (le)
+            ) > 1
+          for: 2m
+          labels:
+            severity: warning
+            namespace: kubesentinel
+          annotations:
+            summary: "High p95 latency on sacrificial app"
+            description: >
+              The 95th percentile request latency on the sacrificial app is
+              {{ $value | humanizeDuration }}, exceeding the 1s threshold.

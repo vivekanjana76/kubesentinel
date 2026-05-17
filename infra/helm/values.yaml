@@ -1,0 +1,121 @@
+# Helm values for kube-prometheus-stack
+# Chart: prometheus-community/kube-prometheus-stack
+# Target: local Kind cluster on a developer laptop
+
+# ── Prometheus ─────────────────────────────────────────────────────────────────
+prometheus:
+  prometheusSpec:
+    retention: 6h
+    retentionSize: "1GB"
+
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "1Gi"
+      limits:
+        cpu: "2000m"
+        memory: "2Gi"
+
+    # Discover ServiceMonitors from all namespaces (not just the release namespace)
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+
+    # Discover PrometheusRules from all namespaces
+    ruleSelectorNilUsesHelmValues: false
+    ruleSelector: {}
+    ruleNamespaceSelector: {}
+
+  service:
+    type: NodePort
+    nodePort: 30090
+
+# ── Alertmanager ───────────────────────────────────────────────────────────────
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+
+  service:
+    type: NodePort
+    nodePort: 30093
+
+  config:
+    global:
+      resolve_timeout: 5m
+
+    route:
+      group_by: ["alertname", "namespace"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 1h
+      receiver: kubesentinel-webhook
+      routes:
+        # Silence the chart's built-in Watchdog heartbeat alert — it is not an
+        # actionable incident. The "null" receiver must be declared even though it
+        # has no configs; Alertmanager validates all receiver references at startup
+        # and will fail reconciliation if the name is missing from the receivers list.
+        - matchers:
+            - alertname = "Watchdog"
+          receiver: "null"
+
+    receivers:
+      - name: "null"
+      - name: kubesentinel-webhook
+        webhook_configs:
+          - url: "http://host.docker.internal:8000/webhook/alert"
+            send_resolved: true
+
+    inhibit_rules:
+      - source_matchers:
+          - severity="critical"
+        target_matchers:
+          - severity="warning"
+        equal: ["alertname", "namespace"]
+
+# ── Grafana ────────────────────────────────────────────────────────────────────
+grafana:
+  enabled: true
+  adminPassword: "kubesentinel-dev"
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+  service:
+    type: ClusterIP
+
+# ── Component resource tuning for laptop use ────────────────────────────────────
+kubeStateMetrics:
+  resources:
+    requests:
+      cpu: "10m"
+      memory: "32Mi"
+    limits:
+      cpu: "100m"
+      memory: "128Mi"
+
+nodeExporter:
+  resources:
+    requests:
+      cpu: "10m"
+      memory: "32Mi"
+    limits:
+      cpu: "100m"
+      memory: "64Mi"
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"

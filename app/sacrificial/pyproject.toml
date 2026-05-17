@@ -1,0 +1,14 @@
+[project]
+name = "kubesentinel-sacrificial"
+version = "0.1.0"
+description = "Deliberately broken FastAPI app for KubeSentinel failure-mode testing"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "prometheus-fastapi-instrumentator>=7.0.0",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"

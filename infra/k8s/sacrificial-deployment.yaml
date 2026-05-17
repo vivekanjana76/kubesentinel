@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sacrificial
+  namespace: kubesentinel
+  labels:
+    app: sacrificial
+    app.kubernetes.io/name: sacrificial
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: target-app
+    app.kubernetes.io/part-of: kubesentinel
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sacrificial
+  template:
+    metadata:
+      labels:
+        app: sacrificial
+        app.kubernetes.io/name: sacrificial
+        app.kubernetes.io/version: "0.1.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: sacrificial
+          image: kubesentinel/sacrificial:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: SLOW_DURATION_SECONDS
+              value: "5"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 3
+      terminationGracePeriodSeconds: 10

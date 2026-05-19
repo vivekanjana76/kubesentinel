@@ -14,6 +14,12 @@ dependencies = [
     "langgraph>=0.2.0",
     "langchain>=0.3.0",
     "langchain-openai>=0.2.0",
+    # LLM providers (Phase 3) — Gemini for long-context log analysis (Phase 4 use)
+    "langchain-google-genai>=2.0.0",
+    # CLI (Phase 3)
+    "typer>=0.12.0",
+    # YAML fixtures (Phase 3 mock toolkit)
+    "PyYAML>=6.0.0",
     # Kubernetes client (Phase 2+)
     "kubernetes>=31.0.0",
     # GitHub client (Phase 2+)

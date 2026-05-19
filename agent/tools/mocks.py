@@ -13,14 +13,13 @@ this guarantees one loop iteration.
 
 from __future__ import annotations
 
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import structlog
 import yaml
 
-from agent.state import ActionLog, ProposedFix
+from agent.state import ActionLog, ProposedFix, _utcnow
 from agent.tools.base import Toolkit
 
 log = structlog.get_logger()
@@ -77,7 +76,7 @@ class MockToolkit(Toolkit):
     def apply_remediation(self, fix: ProposedFix) -> ActionLog:
         log.info("mock.apply_remediation", target=fix.target, type=fix.type)
         return ActionLog(
-            timestamp=datetime.utcnow(),
+            timestamp=_utcnow(),
             node="remediate",
             action="apply_remediation",
             result=f"would have applied {fix.type} to {fix.target}",
@@ -91,7 +90,7 @@ class MockToolkit(Toolkit):
     def open_pr(self, fix: ProposedFix, rca: str) -> ActionLog:
         log.info("mock.open_pr", target=fix.target)
         return ActionLog(
-            timestamp=datetime.utcnow(),
+            timestamp=_utcnow(),
             node="remediate",
             action="open_pr",
             result=f"would have opened PR for {fix.target}",
@@ -101,7 +100,7 @@ class MockToolkit(Toolkit):
     def post_slack(self, channel: str, message: str) -> ActionLog:
         log.info("mock.post_slack", channel=channel, length=len(message))
         return ActionLog(
-            timestamp=datetime.utcnow(),
+            timestamp=_utcnow(),
             node="report",
             action="post_slack",
             result=f"would have posted to {channel}",

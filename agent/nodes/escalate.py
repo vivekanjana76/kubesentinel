@@ -6,11 +6,10 @@ Toolkit and potentially open a draft PR with the partial diagnosis attached.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from agent.nodes._logging import node_span
-from agent.state import ActionLog, AgentState
+from agent.state import ActionLog, AgentState, _utcnow
 
 
 def escalate(state: AgentState) -> dict[str, Any]:
@@ -25,7 +24,7 @@ def escalate(state: AgentState) -> dict[str, Any]:
             else "no fix proposed"
         )
         action = ActionLog(
-            timestamp=datetime.utcnow(),
+            timestamp=_utcnow(),
             node="escalate",
             action="request_human_approval",
             result=f"human approval required for {fix_desc} (confidence={state.confidence:.2f})",

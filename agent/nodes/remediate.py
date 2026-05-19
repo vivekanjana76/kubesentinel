@@ -7,11 +7,10 @@ PRs. The node code is identical in both cases — it only talks to the Toolkit.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from agent.nodes._logging import node_span
-from agent.state import ActionLog, AgentState
+from agent.state import ActionLog, AgentState, _utcnow
 from agent.tools.base import Toolkit
 
 
@@ -19,7 +18,7 @@ def remediate(state: AgentState, *, toolkit: Toolkit) -> dict[str, Any]:
     if state.proposed_fix is None:
         # Guard: route_after_reason should never send us here without a fix.
         err = ActionLog(
-            timestamp=datetime.utcnow(),
+            timestamp=_utcnow(),
             node="remediate",
             action="apply_remediation",
             result="error: no proposed_fix in state",

@@ -7,17 +7,16 @@ CLI with an `AlertPayload` already in state.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from agent.nodes._logging import node_span
-from agent.state import ActionLog, AgentState
+from agent.state import ActionLog, AgentState, _utcnow
 
 
 def receive_alert(state: AgentState) -> dict[str, Any]:
     with node_span("receive_alert", alert=state.alert.name) as span:
         entry = ActionLog(
-            timestamp=datetime.utcnow(),
+            timestamp=_utcnow(),
             node="receive_alert",
             action="ingest_alert",
             result=f"received alert {state.alert.name} severity={state.alert.severity}",

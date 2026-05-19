@@ -7,11 +7,10 @@ on subsequent calls (real cluster: more recent logs; mock: configurable).
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from agent.nodes._logging import node_span
-from agent.state import ActionLog, AgentState
+from agent.state import ActionLog, AgentState, _utcnow
 from agent.tools.base import Toolkit
 
 
@@ -26,21 +25,21 @@ def investigate(state: AgentState, *, toolkit: Toolkit) -> dict[str, Any]:
 
         actions = [
             ActionLog(
-                timestamp=datetime.utcnow(),
+                timestamp=_utcnow(),
                 node="investigate",
                 action="fetch_logs",
                 result=f"{len(logs)} log lines",
                 metadata={"namespace": namespace, "pod": pod},
             ),
             ActionLog(
-                timestamp=datetime.utcnow(),
+                timestamp=_utcnow(),
                 node="investigate",
                 action="fetch_events",
                 result=f"{len(events)} events",
                 metadata={"namespace": namespace, "pod": pod},
             ),
             ActionLog(
-                timestamp=datetime.utcnow(),
+                timestamp=_utcnow(),
                 node="investigate",
                 action="fetch_recent_commits",
                 result=f"{len(commits)} commits in last 2h",

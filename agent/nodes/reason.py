@@ -7,12 +7,11 @@ json_mode lives in the factory — this node just calls the runnable.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from agent.llm.factory import get_structured_llm
 from agent.nodes._logging import node_span
-from agent.state import ActionLog, AgentState, ReasoningOutput
+from agent.state import ActionLog, AgentState, ReasoningOutput, _utcnow
 
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
@@ -132,7 +131,7 @@ def reason(state: AgentState, *, llm: "BaseChatModel") -> dict[str, Any]:
             output: ReasoningOutput = structured.invoke(prompt)
         except Exception as exc:
             error_log = ActionLog(
-                timestamp=datetime.utcnow(),
+                timestamp=_utcnow(),
                 node="reason",
                 action="llm_reason",
                 result=f"error: {exc}",
@@ -146,7 +145,7 @@ def reason(state: AgentState, *, llm: "BaseChatModel") -> dict[str, Any]:
             }
 
         action = ActionLog(
-            timestamp=datetime.utcnow(),
+            timestamp=_utcnow(),
             node="reason",
             action="llm_reason",
             result=f"diagnosis produced, confidence={output.confidence:.2f}",

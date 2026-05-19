@@ -8,8 +8,12 @@ nodes, tools, and the webhook all reference one source of truth.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
 
 from pydantic import BaseModel, Field
 
@@ -60,7 +64,7 @@ class ActionLog(BaseModel):
     remediate/escalate decision. Provides the full timeline for the RCA report.
     """
 
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=_utcnow)
     node: str = Field(description="The graph node that produced this entry.")
     action: str = Field(description="Short verb-phrase: 'fetch_logs', 'llm_reason', etc.")
     result: str = Field(description="Outcome summary — 'ok', 'error: …', or a brief note.")

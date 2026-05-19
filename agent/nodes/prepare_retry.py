@@ -8,18 +8,17 @@ and keeps `route_after_reason` a pure function of state.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from agent.nodes._logging import node_span
-from agent.state import ActionLog, AgentState
+from agent.state import ActionLog, AgentState, _utcnow
 
 
 def prepare_retry(state: AgentState) -> dict[str, Any]:
     new_iteration = state.iteration + 1
     with node_span("prepare_retry", from_iteration=state.iteration, to_iteration=new_iteration) as span:
         action = ActionLog(
-            timestamp=datetime.utcnow(),
+            timestamp=_utcnow(),
             node="prepare_retry",
             action="loop_back",
             result=(

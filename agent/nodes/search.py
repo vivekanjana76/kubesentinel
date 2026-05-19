@@ -6,12 +6,11 @@ reason) and asks the retriever for the top-k matches.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from agent.nodes._logging import node_span
 from agent.rag.retriever import RunbookRetriever
-from agent.state import ActionLog, AgentState
+from agent.state import ActionLog, AgentState, _utcnow
 
 K_RUNBOOKS = 3
 
@@ -40,7 +39,7 @@ def search_history(
     with node_span("search_history", iteration=state.iteration, alert=state.alert.name) as span:
         runbooks = retriever.retrieve(query, k=K_RUNBOOKS)
         action = ActionLog(
-            timestamp=datetime.utcnow(),
+            timestamp=_utcnow(),
             node="search_history",
             action="retrieve_runbooks",
             result=f"{len(runbooks)} runbooks retrieved",

@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 log = structlog.get_logger()
 
 
-def get_reasoning_llm() -> "BaseChatModel":
+def get_reasoning_llm() -> BaseChatModel:
     """Return a chat model configured against OpenRouter free-tier.
 
     OpenRouter is OpenAI-API-compatible, so we route through `langchain-openai`
@@ -51,7 +51,7 @@ def get_reasoning_llm() -> "BaseChatModel":
     )
 
 
-def get_log_analysis_llm() -> "BaseChatModel":
+def get_log_analysis_llm() -> BaseChatModel:
     """Return a Gemini chat model for long-context log analysis.
 
     Defined for Phase 4 — not called in Phase 3.
@@ -69,9 +69,9 @@ def get_log_analysis_llm() -> "BaseChatModel":
 
 
 def get_structured_llm(
-    llm: "BaseChatModel",
-    schema: "type[BaseModel]",
-) -> "Runnable":
+    llm: BaseChatModel,
+    schema: type[BaseModel],
+) -> Runnable:
     """Return a runnable that produces validated `schema` instances.
 
     Strategy:

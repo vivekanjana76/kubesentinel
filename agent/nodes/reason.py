@@ -122,7 +122,7 @@ def _format_prompt(state: AgentState) -> str:
     )
 
 
-def reason(state: AgentState, *, llm: "BaseChatModel") -> dict[str, Any]:
+def reason(state: AgentState, *, llm: BaseChatModel) -> dict[str, Any]:
     prompt = _format_prompt(state)
 
     with node_span("reason", iteration=state.iteration, alert=state.alert.name) as span:

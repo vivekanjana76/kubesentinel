@@ -11,13 +11,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-
-def _utcnow() -> datetime:
-    return datetime.now(UTC)
-
 from pydantic import BaseModel, Field
 
 from agent.rag.retriever import Runbook
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
 
 # ── Alert input ──────────────────────────────────────────────────────────────
 

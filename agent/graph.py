@@ -68,9 +68,9 @@ if TYPE_CHECKING:
 def build_graph(
     *,
     toolkit: Toolkit,
-    llm: "BaseChatModel",
-    retriever: "RunbookRetriever",
-) -> "CompiledStateGraph":
+    llm: BaseChatModel,
+    retriever: RunbookRetriever,
+) -> CompiledStateGraph:
     """Build and compile the agent state machine.
 
     All side-effecting collaborators (toolkit, llm, retriever) are injected

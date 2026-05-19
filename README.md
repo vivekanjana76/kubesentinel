@@ -293,14 +293,22 @@ markdown RCA.
 
 ### Choosing a different LLM
 
-Default is `meta-llama/llama-3.3-70b-instruct:free`. Override per `.env`:
+Default is `deepseek/deepseek-v4-flash:free`. Override per `.env`:
 
 ```ini
-OPENROUTER_REASONING_MODEL=qwen/qwen-2.5-72b-instruct:free
-# Also works (may degrade structured output on some prompts):
-# OPENROUTER_REASONING_MODEL=deepseek/deepseek-chat-v3.1
-# OPENROUTER_REASONING_MODEL=google/gemini-2.0-flash-exp:free
+OPENROUTER_REASONING_MODEL=meta-llama/llama-3.3-70b-instruct:free
+# Other currently-available free models (run a model swap when one rate-limits):
+# OPENROUTER_REASONING_MODEL=openai/gpt-oss-120b:free
+# OPENROUTER_REASONING_MODEL=qwen/qwen3-next-80b-a3b-instruct:free
+# OPENROUTER_REASONING_MODEL=z-ai/glm-4.5-air:free
+# OPENROUTER_REASONING_MODEL=nousresearch/hermes-3-llama-3.1-405b:free
 ```
+
+Free models on OpenRouter are aggressively rate-limited upstream (HTTP 429
+"temporarily rate-limited"). The agent captures the error in an `ActionLog`,
+loops, and ultimately escalates if every attempt fails — that flow is by
+design. For long demo sessions, set `OPENROUTER_API_KEY` to a paid key or
+swap to a different free model.
 
 The factory in `agent/llm/factory.py:get_structured_llm()` auto-falls back
 from function-calling to `method="json_mode"` if a model doesn't support

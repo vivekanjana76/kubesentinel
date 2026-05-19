@@ -18,10 +18,15 @@ Phase 3 only — no real K8s / GitHub / Slack calls anywhere downstream.
 from __future__ import annotations
 
 import sys
-from typing import Optional
 
 import structlog
 import typer
+
+# Windows consoles default to cp1252; reconfigure stdout/stderr to UTF-8 so
+# the markdown RCA (which contains arrows, em dashes, box drawing) renders.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from agent.graph import build_graph
 from agent.llm.factory import get_reasoning_llm
@@ -101,7 +106,7 @@ def _run_scenario(scenario: str) -> AgentState:
 
 @app.command()
 def demo(
-    scenario: Optional[str] = typer.Option(
+    scenario: str | None = typer.Option(
         None,
         "--scenario",
         "-s",

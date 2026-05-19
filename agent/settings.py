@@ -21,12 +21,16 @@ class AgentSettings(BaseSettings):
     openrouter_api_key: str = ""
     # OpenRouter is OpenAI-API-compatible; reached via langchain-openai.
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    # Free-tier reasoning model. Llama 3.3 70B has reliable tool-calling on
-    # OpenRouter's free tier. Alternatives that also work:
-    #   - "qwen/qwen-2.5-72b-instruct:free"
-    #   - "deepseek/deepseek-chat-v3.1"  (may degrade structured output)
-    #   - "google/gemini-2.0-flash-exp:free"
-    openrouter_reasoning_model: str = "meta-llama/llama-3.3-70b-instruct:free"
+    # Free-tier reasoning model. Verified end-to-end against the OOMKilled
+    # scenario in May 2026 — produces structured ReasoningOutput correctly.
+    # Free models are heavily rate-limited upstream; rotate to one of these
+    # when the default 429s:
+    #   - "meta-llama/llama-3.3-70b-instruct:free"
+    #   - "openai/gpt-oss-120b:free"
+    #   - "qwen/qwen3-next-80b-a3b-instruct:free"
+    #   - "z-ai/glm-4.5-air:free"
+    #   - "nousresearch/hermes-3-llama-3.1-405b:free"
+    openrouter_reasoning_model: str = "deepseek/deepseek-v4-flash:free"
 
     google_api_key: str = ""
     # Defined for Phase 4 long-context log analysis. Override via .env.

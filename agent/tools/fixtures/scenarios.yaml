@@ -1,0 +1,66 @@
+# Mock fixture data keyed by alert name. The MockToolkit reads from here so
+# the graph can be exercised end-to-end without a live cluster.
+#
+# Keep entries in sync with the seeded RAG runbooks (oomkilled-pod,
+# high-error-rate, imagepullbackoff, high-latency) so retrieval makes sense.
+
+OOMKilled:
+  pod_logs:
+    - "[2026-05-17 10:14:32] INFO: Processing image batch 142"
+    - "[2026-05-17 10:14:33] MemoryError: Unable to allocate 256.0 MiB for an array with shape (16384, 16384)"
+    - "[2026-05-17 10:14:33] Killed"
+  pod_events:
+    - reason: "OOMKilling"
+      message: "Memory cgroup out of memory: Killed process 1234 (python) total-vm:1456320kB"
+      timestamp: "2026-05-17T10:14:33Z"
+  recent_commits:
+    - sha: "abc1234"
+      message: "feat: add high-res image processing pipeline"
+      author: "alice@example.com"
+      changed_files:
+        - "src/imageproc.py"
+        - "src/batch.py"
+      timestamp: "2026-05-17T09:42:00Z"
+
+HighErrorRate:
+  pod_logs:
+    - "TypeError: 'NoneType' object is not subscriptable"
+    - "  File 'handler.py', line 42, in process_request"
+    - "    user_email = request.user['email']"
+  pod_events: []
+  recent_commits:
+    - sha: "def5678"
+      message: "refactor: change user object shape"
+      author: "bob@example.com"
+      changed_files:
+        - "src/handler.py"
+        - "src/models.py"
+      timestamp: "2026-05-17T11:05:00Z"
+
+ImagePullBackOff:
+  pod_logs: []
+  pod_events:
+    - reason: "Failed"
+      message: "Failed to pull image 'myregistry.io/myapp:v2.3.1': rpc error: code = Unknown desc = Error response from daemon: manifest for myregistry.io/myapp:v2.3.1 not found"
+      timestamp: "2026-05-17T12:00:00Z"
+  recent_commits:
+    - sha: "ghi9012"
+      message: "deploy: bump image to v2.3.1"
+      author: "charlie@example.com"
+      changed_files:
+        - "k8s/deployment.yaml"
+      timestamp: "2026-05-17T11:55:00Z"
+
+HighLatency:
+  pod_logs:
+    - "WARN: Query took 4.2s — SELECT * FROM users WHERE last_login > $1"
+    - "WARN: Query took 5.1s — same"
+    - "INFO: Connection pool exhausted, waiting"
+  pod_events: []
+  recent_commits:
+    - sha: "jkl3456"
+      message: "feat: add last_login filter to users endpoint"
+      author: "dave@example.com"
+      changed_files:
+        - "src/users.py"
+      timestamp: "2026-05-17T08:30:00Z"

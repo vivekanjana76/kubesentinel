@@ -293,15 +293,19 @@ markdown RCA.
 
 ### Choosing a different LLM
 
-Default is `deepseek/deepseek-v4-flash:free`. Override per `.env`:
+Default is `meta-llama/llama-3.3-70b-instruct:free` — most consistent
+tool-calling on the free tier. Every LLM call is bounded by a 90-second
+timeout (`OPENROUTER_REQUEST_TIMEOUT`); when the upstream provider hangs
+or rate-limits, the reason node captures the error and the iteration loop
+retries / escalates as designed.
+
+Override per `.env`:
 
 ```ini
-OPENROUTER_REASONING_MODEL=meta-llama/llama-3.3-70b-instruct:free
-# Other currently-available free models (run a model swap when one rate-limits):
-# OPENROUTER_REASONING_MODEL=openai/gpt-oss-120b:free
-# OPENROUTER_REASONING_MODEL=qwen/qwen3-next-80b-a3b-instruct:free
+# Rotation alternates — confirmed available on the free tier:
+OPENROUTER_REASONING_MODEL=qwen/qwen3-next-80b-a3b-instruct:free
 # OPENROUTER_REASONING_MODEL=z-ai/glm-4.5-air:free
-# OPENROUTER_REASONING_MODEL=nousresearch/hermes-3-llama-3.1-405b:free
+# OPENROUTER_REASONING_MODEL=openai/gpt-oss-120b:free
 ```
 
 Free models on OpenRouter are aggressively rate-limited upstream (HTTP 429

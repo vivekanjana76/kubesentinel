@@ -21,16 +21,20 @@ class AgentSettings(BaseSettings):
     openrouter_api_key: str = ""
     # OpenRouter is OpenAI-API-compatible; reached via langchain-openai.
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    # Free-tier reasoning model. Verified end-to-end against the OOMKilled
-    # scenario in May 2026 — produces structured ReasoningOutput correctly.
-    # Free models are heavily rate-limited upstream; rotate to one of these
-    # when the default 429s:
-    #   - "meta-llama/llama-3.3-70b-instruct:free"
-    #   - "openai/gpt-oss-120b:free"
+    # Free-tier reasoning model. Pinned for determinism + reliability. Llama
+    # 3.3 70B has the most consistent tool-calling on OpenRouter's free tier.
+    # When rate-limited (HTTP 429), the agent's loop+escalate flow handles it
+    # by design — see prepare_retry node and route_after_reason.
+    # Rotation alternates (confirmed available on the free tier):
     #   - "qwen/qwen3-next-80b-a3b-instruct:free"
     #   - "z-ai/glm-4.5-air:free"
-    #   - "nousresearch/hermes-3-llama-3.1-405b:free"
-    openrouter_reasoning_model: str = "deepseek/deepseek-v4-flash:free"
+    #   - "openai/gpt-oss-120b:free"
+    openrouter_reasoning_model: str = "meta-llama/llama-3.3-70b-instruct:free"
+    # Per-request LLM timeout in seconds. Prevents indefinite hangs when an
+    # upstream provider accepts the connection but never returns a response.
+    # On timeout, the reason node captures the error and the existing
+    # iteration loop retries up to max_iterations.
+    openrouter_request_timeout: int = 90
 
     google_api_key: str = ""
     # Defined for Phase 4 long-context log analysis. Override via .env.

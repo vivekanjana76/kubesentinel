@@ -42,12 +42,17 @@ def get_reasoning_llm() -> BaseChatModel:
             "OPENROUTER_API_KEY is not set. Add it to .env before running the "
             "agent (see .env.example)."
         )
+    # `timeout` is forwarded by init_chat_model to ChatOpenAI's request_timeout
+    # so individual structured-output calls can't hang indefinitely. On
+    # timeout, langchain-openai raises an APITimeoutError that the reason
+    # node already catches; the iteration loop then retries.
     return init_chat_model(
         model=settings.openrouter_reasoning_model,
         model_provider="openai",
         base_url=settings.openrouter_base_url,
         api_key=settings.openrouter_api_key,
         temperature=0.2,
+        timeout=settings.openrouter_request_timeout,
     )
 
 

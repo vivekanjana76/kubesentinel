@@ -1,14 +1,11 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+"""
+Phase 2 entry point for settings. Consolidated into `agent.settings` in
+Phase 3 — this module re-exports the unified `settings` instance plus a
+typed alias so existing imports (`from agent.rag.settings import settings`)
+continue to work.
+"""
 
+from agent.settings import AgentSettings as RagSettings
+from agent.settings import settings
 
-class RagSettings(BaseSettings):
-    supabase_url: str
-    supabase_service_role_key: str
-    # Direct Postgres connection — used by migrate.py for DDL execution.
-    # Find in: Supabase Dashboard > Project Settings > Database > Connection string (URI).
-    database_url: str = ""
-
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
-
-settings = RagSettings()  # type: ignore[call-arg]
+__all__ = ["RagSettings", "settings"]

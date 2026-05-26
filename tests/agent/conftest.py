@@ -54,12 +54,14 @@ class _FakeRetriever:
 
 def _fix(
     fix_type: str = "kubectl_patch",
-    target: str = "deployment/sacrificial -n kubesentinel",
+    namespace: str = "kubesentinel",
+    target: str = "deployment/sacrificial",
     description: str = "raise memory limit",
     command_or_diff: str = "kubectl set resources deployment/sacrificial --limits=memory=512Mi",
 ) -> ProposedFix:
     return ProposedFix(
         type=fix_type,  # type: ignore[arg-type]
+        namespace=namespace,
         target=target,
         description=description,
         command_or_diff=command_or_diff,

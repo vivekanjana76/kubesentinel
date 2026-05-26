@@ -26,6 +26,7 @@ def test_proposed_fix_requires_valid_type():
     with pytest.raises(ValidationError):
         ProposedFix(
             type="not_a_real_type",  # type: ignore[arg-type]
+            namespace="kubesentinel",
             target="x",
             description="y",
             command_or_diff="z",
@@ -38,6 +39,7 @@ def test_reasoning_output_confidence_bounded():
             diagnosis="x",
             proposed_fix=ProposedFix(
                 type="kubectl_patch",
+                namespace="kubesentinel",
                 target="x",
                 description="y",
                 command_or_diff="z",
@@ -49,6 +51,7 @@ def test_reasoning_output_confidence_bounded():
             diagnosis="x",
             proposed_fix=ProposedFix(
                 type="kubectl_patch",
+                namespace="kubesentinel",
                 target="x",
                 description="y",
                 command_or_diff="z",

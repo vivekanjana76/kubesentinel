@@ -47,7 +47,8 @@ Analyze the above and produce a structured response with three fields:
   Cite specific log lines, commit SHAs, and runbook sections where relevant.
 - proposed_fix: specific remediation.
   - type: one of "kubectl_patch", "code_change", "config_update"
-  - target: resource being changed (e.g. "deployment/sacrificial -n kubesentinel")
+  - namespace: Kubernetes namespace where the resource lives (e.g. "kubesentinel")
+  - target: resource being changed (e.g. "deployment/sacrificial")
   - description: one-paragraph rationale for *this* fix
   - command_or_diff: the exact kubectl command, code diff, or config snippet
 - confidence: float in [0.0, 1.0] — how certain you are this is the right

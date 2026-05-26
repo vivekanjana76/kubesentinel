@@ -160,8 +160,11 @@ KubeSentinel/
 │   ├── nodes/              # Phase 3: 7 node implementations + routing
 │   ├── llm/factory.py      # Phase 3: OpenRouter / Gemini + structured-output fallback
 │   ├── tools/
-│   │   ├── base.py         #   Toolkit ABC
-│   │   ├── mocks.py        #   MockToolkit (Phase 3 only)
+│   │   ├── base.py             #   Toolkit ABC
+│   │   ├── mocks.py            #   MockToolkit (Phase 3 / CI)
+│   │   ├── real.py             #   RealToolkit (Phase 4 — K8s/GitHub/Slack)
+│   │   ├── safety.py           #   Phase 4 safety guards
+│   │   ├── slack_approval.py   #   Phase 4 Block Kit + emoji-reaction polling
 │   │   └── fixtures/scenarios.yaml
 │   └── rag/                # Phase 2: RAG memory layer
 │       ├── migrations/001_create_runbooks.sql
@@ -173,15 +176,18 @@ KubeSentinel/
 ├── docs/
 │   ├── runbooks/           # 8 seed SRE runbooks (RAG source data)
 │   ├── architecture.md
-│   ├── rag-architecture.md   # Phase 2 RAG design doc
-│   └── agent-architecture.md # Phase 3 agent state machine + sequence diagram
+│   ├── rag-architecture.md     # Phase 2 RAG design doc
+│   ├── agent-architecture.md   # Phase 3+4 agent state machine, DI seam, sequence diagram
+│   ├── safety-boundaries.md    # Phase 4 safety guards + production equivalents
+│   └── demo-flow.md            # Phase 4 demo recording guide + Slack scope checklist
 ├── infra/
 │   ├── kind/cluster.yaml
 │   ├── k8s/
 │   └── helm/values.yaml
 ├── tests/
 │   ├── rag/                # 23 tests: chunker, retriever, ingest
-│   └── agent/              # 21 tests: state, mocks, routing, two scenario E2Es
+│   ├── agent/              # 21 tests: state, mocks, routing, two scenario E2Es
+│   └── tools/              # 78 tests: safety guards, RealToolkit, Slack approval
 ├── Makefile
 ├── make.ps1
 ├── pyproject.toml
@@ -343,6 +349,138 @@ py -3.12 -m pytest tests/agent -v
 21 agent tests + 23 RAG tests = 44 total. No real LLM, Supabase, or cluster
 calls happen in CI — the LLM is replaced with a `FakeStructuredRunnable`
 that returns pre-built `ReasoningOutput` instances.
+
+---
+
+## Phase 4: Real Tools + Webhook Autotrigger
+
+Phase 4 swaps `MockToolkit` for `RealToolkit` (live K8s API, GitHub PR
+creation, Slack notifications) and enables the Alertmanager webhook to trigger
+the agent automatically via FastAPI `BackgroundTasks`.
+
+### New `.env` variables
+
+```ini
+# External services
+GITHUB_TOKEN=ghp_...                      # PAT with repo + workflow scopes
+GITHUB_AGENT_REPO_OWNER=your-gh-username
+GITHUB_AGENT_REPO_NAME=kubesentinel-demo-app
+SLACK_BOT_TOKEN=xoxb-...                  # Bot token from OAuth & Permissions
+SLACK_INCIDENTS_CHANNEL=#incidents
+
+# Safety / mode
+DRY_RUN=true                              # false → real PRs + K8s patches
+AGENT_USE_REAL_TOOLS=true                 # false → MockToolkit (default)
+AGENT_AUTOTRIGGER=true                    # false → webhook just logs, no agent
+REQUIRE_SLACK_APPROVAL_FOR_PATCHES=true   # false → skip approval gate
+ALLOWED_NAMESPACES=kubesentinel,kubesentinel-demo
+PR_TARGET_BRANCH=develop
+```
+
+See `.env.example` for the full list with descriptions.
+
+### Setup checklist
+
+1. **Cluster up:** `.\make.ps1 up`
+2. **Slack app:** Create app, add required scopes (see below), install,
+   invite bot to `#incidents`.
+3. **GitHub repo:** Create a demo repo; generate a PAT with `repo` + `workflow`
+   scopes.
+4. **`.env`:** Populate all variables above. Keep `DRY_RUN=true` until you
+   have verified everything works.
+5. **Verify:** `.\make.ps1 verify-tools` — all three services must show `OK`.
+
+### Required Slack scopes
+
+| Scope | Why |
+|---|---|
+| `chat:write` | Post messages to member channels |
+| `chat:write.public` | Post to channels without being a member |
+| `channels:read` | List channels (connectivity check) |
+| `channels:history` | Read message history |
+| `reactions:read` | Poll emoji reactions for the approval gate |
+| `files:write` | Attach files to messages |
+
+> After adding scopes to an already-installed app, you must reinstall it to the
+> workspace. The token changes — copy the new `xoxb-` value into `.env`.
+
+### Dry-run vs live mode
+
+| `DRY_RUN` | Effect |
+|---|---|
+| `true` (default) | All write operations are no-ops; safety guards still run and log violations |
+| `false` | Real K8s patches, real GitHub PRs, real Slack messages |
+
+Start with `DRY_RUN=true`. Flip to `false` only when recording a full demo
+with real cluster access and a valid GitHub repo.
+
+### Slack approval gate
+
+When `REQUIRE_SLACK_APPROVAL_FOR_PATCHES=true` and a `kubectl_patch` fix is
+proposed, the agent posts a Block Kit message to `#incidents` and polls for
+emoji reactions:
+
+- ✅ `:white_check_mark:` → **APPROVE** — agent applies the patch
+- ❌ `:x:` → **REJECT** — agent escalates instead
+- No reaction within 5 minutes → **TIMEOUT** — agent escalates
+
+This avoids requiring a publicly reachable callback URL. See
+[docs/demo-flow.md](docs/demo-flow.md) for the full demo recording guide.
+
+### Safety boundaries
+
+Six hard guards protect every write operation (see
+[docs/safety-boundaries.md](docs/safety-boundaries.md)):
+
+1. Namespace allowlist — blocks ops outside `ALLOWED_NAMESPACES`
+2. Protected resource kinds — blocks `delete` on Namespace / PV / PVC
+3. PR target branch lock — blocks PRs targeting `main`
+4. Slack channel lock — blocks messages to non-incident channels
+5. Shell injection filter — blocks `;`, `|`, `&&`, `` ` `` in commands
+6. DRY_RUN gate — short-circuits all external writes
+
+### CLI commands (Phase 4)
+
+```powershell
+# Run with RealToolkit (requires AGENT_USE_REAL_TOOLS=true)
+py -3.12 -m agent.cli live --scenario OOMKilled
+
+# Verify K8s / GitHub / Slack connectivity
+py -3.12 -m agent.cli verify-tools
+
+# Clean up after a demo
+py -3.12 -m agent.cli demo-reset
+```
+
+PowerShell equivalents:
+```powershell
+.\make.ps1 verify-tools
+.\make.ps1 live-demo     # full end-to-end with stage markers
+.\make.ps1 demo-reset
+```
+
+### Project structure (Phase 4 additions)
+
+```
+agent/tools/
+├── base.py             # Toolkit ABC (unchanged)
+├── mocks.py            # MockToolkit (unchanged)
+├── real.py             # RealToolkit — K8s / GitHub / Slack
+├── safety.py           # Six non-bypassable write guards
+└── slack_approval.py   # Block Kit posting + emoji-reaction polling
+docs/
+├── safety-boundaries.md  # Guard details + production equivalents
+└── demo-flow.md          # Step-by-step demo recording guide
+```
+
+### Tests
+
+```powershell
+py -3.12 -m pytest tests/ -v
+```
+
+122 tests total (44 Phase 3 + 78 Phase 4). No live credentials needed — all
+external calls are mocked.
 
 ---
 

@@ -94,25 +94,66 @@ collaborators (toolkit, LLM, retriever) are bound via `functools.partial` in
 
 ---
 
-## 3. Dependency injection seam
+## 3. Real vs Mock Tools
+
+The graph code never imports a concrete toolkit. `build_graph()` accepts a
+`Toolkit` ABC instance; all nodes interact only with the abstract interface.
+Swapping real for mock is one line in the calling code — the graph is untouched.
 
 ```python
+# Mock (Phase 3 / CI / demo without credentials)
 build_graph(toolkit=MockToolkit("OOMKilled"), llm=get_reasoning_llm(), retriever=get_retriever())
+
+# Real (Phase 4 / live demo)
+build_graph(toolkit=RealToolkit(...), llm=get_reasoning_llm(), retriever=get_retriever())
 ```
 
-Phase 4 will swap a single import:
+`get_default_toolkit()` (in `agent/graph.py`) encapsulates this decision:
 
 ```python
-build_graph(toolkit=RealToolkit(), llm=get_reasoning_llm(), retriever=get_retriever())
+def get_default_toolkit(alert_name: str = "unknown") -> Toolkit:
+    if settings.agent_use_real_tools:
+        return build_real_toolkit(settings, alert_name=alert_name)
+    return MockToolkit(scenario="OOMKilled")
 ```
 
-The graph code never imports a concrete toolkit. The `Toolkit` ABC
-(`agent/tools/base.py`) is the only contract the graph depends on.
+Set `AGENT_USE_REAL_TOOLS=true` in `.env` to activate the real toolkit. Run
+`python -m agent.cli verify-tools` first to confirm all credentials work.
 
-The mock toolkit (`agent/tools/mocks.py`) reads from
-`agent/tools/fixtures/scenarios.yaml`, which currently ships four scenarios
-matching the Phase 2 seed runbooks: `OOMKilled`, `HighErrorRate`,
-`ImagePullBackOff`, `HighLatency`.
+### MockToolkit
+
+Reads from `agent/tools/fixtures/scenarios.yaml`. Ships four scenarios matching
+the Phase 2 seed runbooks: `OOMKilled`, `HighErrorRate`, `ImagePullBackOff`,
+`HighLatency`. Write methods (`apply_remediation`, `open_pr`, `post_slack`) are
+no-ops that return descriptive `ActionLog` entries. No external credentials needed.
+
+### RealToolkit
+
+Backed by three live clients:
+
+| Client | Auth | Read ops | Write ops |
+|---|---|---|---|
+| Kubernetes | `~/.kube/config` (or `KUBECONFIG_PATH`) | `fetch_logs`, `fetch_events` | `apply_remediation` (kubectl_patch via AppsV1Api) |
+| GitHub | `GITHUB_TOKEN` PAT | `fetch_recent_commits` | `open_pr` (branch + 2-file commit + PR) |
+| Slack | `SLACK_BOT_TOKEN` xoxb- | — | `post_slack`, Slack approval gate |
+
+All write operations are guarded by six safety checks (see
+[docs/safety-boundaries.md](safety-boundaries.md)) and are no-ops when
+`DRY_RUN=true` (the default).
+
+### Slack approval gate
+
+When `REQUIRE_SLACK_APPROVAL_FOR_PATCHES=true` (default) and a `kubectl_patch`
+fix is proposed in live mode, the agent:
+
+1. Posts a Block Kit message to `#incidents` with the fix details and RCA.
+2. Polls `reactions.get` every 5 seconds for up to 5 minutes.
+3. Returns `approved` on ✅ (`:white_check_mark:`), `rejected` on ❌ (`:x:`).
+4. Raises `ApprovalDeniedError` on rejection or timeout; the run escalates.
+
+This design avoids requiring a publicly reachable callback URL (which
+interactive Slack buttons need). See [docs/demo-flow.md](demo-flow.md) for the
+full demo script including Slack scope requirements.
 
 ---
 
@@ -190,7 +231,7 @@ sequenceDiagram
     participant L as OpenRouter LLM
 
     Alert->>WH: POST AlertmanagerWebhookPayload
-    Note over WH: Phase 3 default: AGENT_AUTOTRIGGER=false<br/>just logs and returns 200<br/>(CLI exercises the graph instead)
+    Note over WH: AGENT_AUTOTRIGGER=true (Phase 4):<br/>background_tasks.add_task(_run_agent_for_alert)<br/>returns 200 immediately — Alertmanager doesn't retry
 
     Note over G: build_graph(toolkit=Mock, llm=OpenRouter, retriever=RAG)
 

@@ -55,6 +55,38 @@ def _root() -> None:
 
 SCENARIOS: list[str] = ["OOMKilled", "HighErrorRate", "ImagePullBackOff", "HighLatency"]
 
+
+def _resolve_live_pod(namespace: str, label_selector: str = "app=sacrificial") -> str:
+    """Return the name of the first Running pod matching label_selector in namespace.
+
+    Loads kubeconfig via KUBECONFIG_PATH (settings) or the default ~/.kube/config.
+    Skips pods in Pending or Terminating (deletionTimestamp set) states.
+
+    Raises RuntimeError with a remediation hint if no Running pod is found.
+    """
+    import kubernetes  # noqa: PLC0415
+
+    if settings.kubeconfig_path:
+        kubernetes.config.load_kube_config(config_file=settings.kubeconfig_path)
+    else:
+        kubernetes.config.load_kube_config()
+
+    core_v1 = kubernetes.client.CoreV1Api()
+    resp = core_v1.list_namespaced_pod(namespace, label_selector=label_selector)
+
+    for pod in resp.items:
+        # Skip pods being deleted (Terminating).
+        if pod.metadata.deletion_timestamp is not None:
+            continue
+        phase = pod.status.phase if pod.status else None
+        if phase == "Running":
+            return pod.metadata.name
+
+    raise RuntimeError(
+        f"Could not find a running pod in '{namespace}' matching '{label_selector}'. "
+        "Is the sacrificial app deployed? Run: .\\make.ps1 status"
+    )
+
 # Default alert payloads per scenario. Matches the fixture data semantically
 # so the LLM has consistent context (alert + findings + runbooks all agree).
 DEFAULT_ALERTS: dict[str, AlertPayload] = {
@@ -212,10 +244,27 @@ def live(
         typer.echo(f"Failed to initialise RealToolkit: {exc}", err=True)
         raise typer.Exit(code=1)
 
+    # Resolve the actual pod name from the cluster — synthetic alerts use a
+    # placeholder name that won't match generated pod names like sacrificial-d67755488-899ds.
+    alert = DEFAULT_ALERTS[scenario]
+    namespace = settings.allowed_namespaces[0]
+    try:
+        actual_pod = _resolve_live_pod(namespace, label_selector="app=sacrificial")
+        log.info(
+            "cli.live.resolved_pod",
+            alert=scenario,
+            synthetic_pod=alert.pod,
+            actual_pod=actual_pod,
+        )
+        alert = alert.model_copy(update={"pod": actual_pod})
+    except RuntimeError as exc:
+        typer.echo(f"Pod resolution failed: {exc}", err=True)
+        raise typer.Exit(code=1)
+
     llm = get_reasoning_llm()
     retriever = get_retriever()
     graph = build_graph(toolkit=toolkit, llm=llm, retriever=retriever)
-    initial = AgentState(alert=DEFAULT_ALERTS[scenario])
+    initial = AgentState(alert=alert)
     final_dict = graph.invoke(initial)
     final = AgentState(**final_dict)
 

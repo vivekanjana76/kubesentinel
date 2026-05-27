@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+env:
+  OPENROUTER_API_KEY: "dummy-ci-key"
+  GOOGLE_API_KEY: "dummy-ci-key"
+  GITHUB_AGENT_REPO_OWNER: "ci-owner"
+  GITHUB_AGENT_REPO_NAME: "ci-repo"
+  SLACK_BOT_TOKEN: "xoxb-dummy-ci-token"
+  SLACK_INCIDENTS_CHANNEL: "#ci-test"
+  SUPABASE_URL: "https://dummy.supabase.co"
+  SUPABASE_SERVICE_ROLE_KEY: "dummy-ci-key"
+  DATABASE_URL: "postgresql://postgres:dummy@localhost:5432/postgres"
+  DRY_RUN: "true"
+  AGENT_USE_REAL_TOOLS: "false"
+  AGENT_AUTOTRIGGER: "false"
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install ".[dev]"
+
+      - name: Lint with ruff
+        run: ruff check .
+
+      - name: Run tests
+        run: pytest -v

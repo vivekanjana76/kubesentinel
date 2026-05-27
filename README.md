@@ -55,7 +55,7 @@ See [docs/architecture.md](docs/architecture.md) for detailed component diagrams
 ```powershell
 git clone https://github.com/vivekanjana76/kubesentinel.git
 cd kubesentinel
-py -3.12 -m venv .venv && .venv\Scripts\Activate.ps1
+py -3.12 -m venv .venv; .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 # Configure .env from .env.example, then:
 py -3.12 -m agent.cli demo --scenario OOMKilled
@@ -85,7 +85,7 @@ py -3.12 -m agent.cli demo --scenario OOMKilled
 
 **Alert Pipeline.** A deliberately broken FastAPI app runs inside a Kind cluster. Prometheus scrapes its `/metrics` endpoint every 15 seconds and evaluates four alert rules (HighErrorRate, PodCrashLooping, HighMemoryUsage, HighLatency). When a rule fires, Alertmanager groups the alert and POSTs it to a webhook receiver on the host machine, which validates the payload and triggers the agent.
 
-**LangGraph State Machine.** The agent is an 8-node state graph. It receives the alert, investigates by pulling pod logs, events, and recent commits, then searches the RAG store for matching runbooks. The `reason` node calls an LLM with structured output to produce a diagnosis, proposed fix, and confidence score. A conditional router sends high-confidence fixes to `remediate` (which applies a kubectl patch or opens a GitHub PR), low-confidence results back to `investigate` for a re-try loop, and everything else to `escalate`. Every run ends with a markdown RCA report.
+**LangGraph State Machine.** The agent is an eight-node state graph. It receives the alert, investigates by pulling pod logs, events, and recent commits, then searches the RAG store for matching runbooks. The `reason` node calls an LLM with structured output to produce a diagnosis, proposed fix, and confidence score. A conditional router sends high-confidence fixes to `remediate` (which applies a kubectl patch or opens a GitHub PR), low-confidence results back to `investigate` for a re-try loop, and everything else to `escalate`. Every run ends with a markdown RCA report.
 
 **RAG Memory.** Eight seed runbooks covering common Kubernetes failure modes are chunked, embedded locally using BGE-small-en-v1.5 (384 dimensions, zero API cost), and stored in Supabase with a pgvector HNSW cosine index. The retriever returns the top-k matches by cosine similarity, giving the LLM grounded context for diagnosis. See [docs/rag-architecture.md](docs/rag-architecture.md) for schema design and chunking strategy.
 
@@ -124,6 +124,8 @@ KubeSentinel/
 | **3. Agent Skeleton** | LangGraph 8-node state machine, MockToolkit, OpenRouter reasoning, structured output with fallback, CLI, 44 tests | [#6](https://github.com/vivekanjana76/kubesentinel/pull/6) |
 | **4. Real Tools** | RealToolkit (K8s API, GitHub PRs, Slack notifications), 6 safety guards, dry-run mode, Slack emoji approval gate, webhook autotrigger, 122 tests | [#8](https://github.com/vivekanjana76/kubesentinel/pull/8) |
 | **5. Polish** | README rewrite, CI pipeline, measured metrics, architecture diagrams, demo recording guide, resume content | [#10](https://github.com/vivekanjana76/kubesentinel/pull/10) |
+
+> Test counts shown cumulative.
 
 ---
 

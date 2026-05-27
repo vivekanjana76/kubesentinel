@@ -69,10 +69,11 @@ py -3.12 -m agent.cli demo --scenario OOMKilled
 
 | Metric | Value | Notes |
 |---|---|---|
-| MTTR (median) | PLACEHOLDER | MockToolkit + Llama 3.3 70B via OpenRouter |
-| MTTR (min / max) | PLACEHOLDER | 5 runs, measured with `Measure-Command` |
-| Test suite | 122 tests, all passing | Fully mocked — no credentials needed in CI |
-| Test coverage | PLACEHOLDER | `agent/` package, measured with pytest-cov |
+| MTTR (median) | 236.6s | MockToolkit + Llama 3.3 70B via OpenRouter |
+| MTTR (min / max) | 204.1s / 239.7s | 5 runs, measured with `Measure-Command` |
+| Reasoning node | ~55s per call (~80% of MTTR) | Free-tier LLM latency dominates |
+| Test suite | 133 tests, all passing | Fully mocked — no credentials needed in CI |
+| Test coverage | 64% overall, 93% core logic | `agent/` package, measured with pytest-cov |
 | RAG retrieval quality | 0.69 - 0.82 cosine similarity | Across 8 canonical runbook queries |
 | LangGraph nodes | 8 | receive_alert, investigate, search_history, reason, prepare_retry, remediate, escalate, report |
 | Conditional routes | 3 | remediate (conf >= 0.7), prepare_retry (conf < 0.4 + retries), escalate (fallback) |
@@ -107,7 +108,7 @@ KubeSentinel/
 ├── app/sacrificial/        # Intentionally broken FastAPI app (the workload)
 ├── infra/                  # Kind cluster config, K8s manifests, Helm values
 ├── docs/                   # Architecture, runbooks, safety, demo guide, metrics
-├── tests/                  # 122 tests: RAG, agent, tools, CLI (all mocked)
+├── tests/                  # 133 tests: RAG, agent, tools, CLI (all mocked)
 ├── .github/workflows/      # CI: ruff lint + pytest on every push/PR
 ├── pyproject.toml          # Python project config
 └── requirements.txt        # Locked dependencies

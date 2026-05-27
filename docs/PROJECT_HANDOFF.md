@@ -53,7 +53,7 @@ Deliverables:
 - Webhook autotrigger via FastAPI `BackgroundTasks` (gated by `AGENT_AUTOTRIGGER`)
 - CLI: `live --scenario`, `verify-tools`, `demo-reset`
 - `make.ps1` targets: `verify-tools`, `live-demo`, `demo-reset`
-- 122 tests total (all external calls fully mocked)
+- 133 tests total (all external calls fully mocked)
 
 ### Phase 5: Polish — DONE
 **PR:** [#10](https://github.com/vivekanjana76/kubesentinel/pull/10) merged to `develop`

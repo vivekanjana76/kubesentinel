@@ -60,6 +60,7 @@ def test_write_methods_return_action_logs():
     t = MockToolkit("OOMKilled")
     fix = ProposedFix(
         type="kubectl_patch",
+        namespace="kubesentinel",
         target="deployment/sacrificial",
         description="raise limit",
         command_or_diff="kubectl set resources ...",

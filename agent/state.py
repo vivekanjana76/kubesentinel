@@ -50,6 +50,7 @@ class ProposedFix(BaseModel):
     """A single concrete remediation proposed by the reasoning node."""
 
     type: FixType
+    namespace: str = Field(description="Kubernetes namespace where the resource lives, e.g. 'kubesentinel'.")
     target: str = Field(description="Resource being changed, e.g. 'deployment/sacrificial'.")
     description: str = Field(description="One-paragraph human-readable rationale.")
     command_or_diff: str = Field(

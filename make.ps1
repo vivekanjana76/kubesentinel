@@ -28,7 +28,8 @@
 param(
     [Parameter(Position = 0, Mandatory = $true)]
     [ValidateSet("up", "down", "status", "logs-app", "logs-webhook", "webhook-dev", "break-app",
-                 "cluster-create", "image-build", "image-load", "helm-install", "manifests-apply")]
+                 "cluster-create", "image-build", "image-load", "helm-install", "manifests-apply",
+                 "verify-tools", "demo-reset", "live-demo")]
     [string]$Target
 )
 
@@ -207,6 +208,124 @@ function Invoke-BreakApp {
     Write-Host "Prometheus alerts: http://localhost:9090/alerts"
 }
 
+function Invoke-VerifyTools {
+    Write-Host "==> Verifying external tool connectivity..." -ForegroundColor Cyan
+    if (-not (Test-Path ".venv")) {
+        Write-Host ".venv not found. Run: .\make.ps1 up" -ForegroundColor Red
+        exit 1
+    }
+    Invoke-Native { .venv\Scripts\python -m agent.cli verify-tools }
+}
+
+function Invoke-DemoReset {
+    Write-Host "==> Running demo reset..." -ForegroundColor Cyan
+    if (-not (Test-Path ".venv")) {
+        Write-Host ".venv not found. Run: .\make.ps1 up" -ForegroundColor Red
+        exit 1
+    }
+    Invoke-Native { .venv\Scripts\python -m agent.cli demo-reset }
+}
+
+function Invoke-LiveDemo {
+    <#
+    .SYNOPSIS
+    End-to-end live demo: cluster up, webhook running, failure injected, alert fires, agent responds.
+
+    .DESCRIPTION
+    Runs through the full KubeSentinel demo loop with stage markers so it can be
+    recorded as a walkthrough. Assumes credentials are set in .env.
+    #>
+    Write-Host ""
+    Write-Host "======================================================================" -ForegroundColor Magenta
+    Write-Host "  KubeSentinel Live Demo" -ForegroundColor Magenta
+    Write-Host "  DRY_RUN=true by default — set DRY_RUN=false in .env for real PRs." -ForegroundColor Magenta
+    Write-Host "======================================================================" -ForegroundColor Magenta
+    Write-Host ""
+
+    # ── Stage 1: Cluster ──────────────────────────────────────────────────────
+    Write-Host "[ Stage 1 ] Cluster up" -ForegroundColor Cyan
+    Invoke-ClusterCreate
+    Write-Host "  => Cluster up" -ForegroundColor Green
+    Write-Host ""
+
+    # ── Stage 2: Webhook ─────────────────────────────────────────────────────
+    Write-Host "[ Stage 2 ] Webhook running" -ForegroundColor Cyan
+    Write-Host "  Starting webhook receiver in background on :8000..." -ForegroundColor DarkGray
+    $webhookJob = Start-Job -ScriptBlock {
+        Set-Location $using:PWD
+        & .venv\Scripts\uvicorn agent.webhook:app --host 0.0.0.0 --port 8000 2>&1 |
+            Out-File -FilePath webhook.log -Encoding utf8
+    }
+    Start-Sleep -Seconds 4
+    $healthCheck = $null
+    try {
+        $healthCheck = Invoke-WebRequest -Uri "http://localhost:8000/health" -UseBasicParsing -TimeoutSec 5
+    } catch {}
+    if ($healthCheck -and $healthCheck.StatusCode -eq 200) {
+        Write-Host "  => Webhook running (http://localhost:8000/health)" -ForegroundColor Green
+    } else {
+        Write-Host "  WARN: Webhook health check failed — check webhook.log" -ForegroundColor Yellow
+    }
+    Write-Host ""
+
+    # ── Stage 3: Verify tools ─────────────────────────────────────────────────
+    Write-Host "[ Stage 3 ] Verifying credentials" -ForegroundColor Cyan
+    Invoke-Native { .venv\Scripts\python -m agent.cli verify-tools }
+    Write-Host ""
+
+    # ── Stage 4: Inject failure ───────────────────────────────────────────────
+    Write-Host "[ Stage 4 ] Triggering failure" -ForegroundColor Cyan
+    Invoke-BreakApp
+    Write-Host "  => Failure injected" -ForegroundColor Green
+    Write-Host ""
+
+    # ── Stage 5: Wait for alert ───────────────────────────────────────────────
+    Write-Host "[ Stage 5 ] Alert fired" -ForegroundColor Cyan
+    Write-Host "  Waiting up to 3 minutes for Alertmanager to fire..." -ForegroundColor DarkGray
+    $fired = $false
+    for ($i = 0; $i -lt 18; $i++) {
+        Start-Sleep -Seconds 10
+        $amResp = $null
+        try {
+            $amResp = Invoke-WebRequest -Uri "http://localhost:9093/api/v2/alerts" `
+                -UseBasicParsing -TimeoutSec 5
+        } catch {}
+        if ($amResp -and $amResp.Content -match '"status":"firing"') {
+            $fired = $true
+            Write-Host "  => Alert fired" -ForegroundColor Green
+            break
+        }
+        Write-Host "  ...waiting ($((($i+1)*10))s)" -ForegroundColor DarkGray
+    }
+    if (-not $fired) {
+        Write-Host "  WARN: No firing alert detected after 3 min. Check Prometheus: http://localhost:9090/alerts" -ForegroundColor Yellow
+    }
+    Write-Host ""
+
+    # ── Stage 6: Run agent ────────────────────────────────────────────────────
+    Write-Host "[ Stage 6 ] Agent responded" -ForegroundColor Cyan
+    Invoke-Native { .venv\Scripts\python -m agent.cli live --scenario OOMKilled }
+    Write-Host "  => Agent responded" -ForegroundColor Green
+    Write-Host ""
+
+    # ── Stage 7: PR link ──────────────────────────────────────────────────────
+    Write-Host "[ Stage 7 ] PR opened" -ForegroundColor Cyan
+    Write-Host "  Check your GitHub repo for agent/fix-* branches and open PRs." -ForegroundColor DarkGray
+    Write-Host "  Run: gh pr list --repo <owner>/<repo> --head agent/fix-" -ForegroundColor DarkGray
+    Write-Host ""
+
+    # ── Cleanup prompt ────────────────────────────────────────────────────────
+    Write-Host "======================================================================" -ForegroundColor Magenta
+    Write-Host "  Demo complete. To clean up: .\make.ps1 demo-reset" -ForegroundColor Magenta
+    Write-Host "======================================================================" -ForegroundColor Magenta
+
+    # Stop background webhook job
+    if ($webhookJob) {
+        Stop-Job -Job $webhookJob -ErrorAction SilentlyContinue
+        Remove-Job -Job $webhookJob -ErrorAction SilentlyContinue
+    }
+}
+
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 switch ($Target) {
     "up"               { Invoke-Up }
@@ -221,4 +340,7 @@ switch ($Target) {
     "image-load"       { Invoke-ImageLoad }
     "helm-install"     { Invoke-HelmInstall }
     "manifests-apply"  { Invoke-ManifestsApply }
+    "verify-tools"     { Invoke-VerifyTools }
+    "demo-reset"       { Invoke-DemoReset }
+    "live-demo"        { Invoke-LiveDemo }
 }

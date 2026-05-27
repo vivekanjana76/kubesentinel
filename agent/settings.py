@@ -50,6 +50,40 @@ class AgentSettings(BaseSettings):
     confidence_high: float = 0.7
     confidence_low: float = 0.4
 
+    # ── Phase 4: External auth ──
+    # K8s: path to kubeconfig. None → default (~/.kube/config / KUBECONFIG env).
+    # Production deployments use load_incluster_config() with a ServiceAccount instead.
+    kubeconfig_path: str | None = None
+    # GitHub PAT — separate from GITHUB_MCP_TOKEN used by Claude Code.
+    # Required scopes: repo (full), workflow.
+    github_token: str = ""
+    # Demo-app repo where agent-created PRs land. NEVER the kubesentinel repo itself.
+    github_agent_repo_owner: str = ""
+    github_agent_repo_name: str = ""
+    # Slack bot token (xoxb-…). Required scopes: chat:write, chat:write.public,
+    # channels:read, channels:history, reactions:read, files:write.
+    slack_bot_token: str = ""
+    slack_incidents_channel: str = "#incidents"
+
+    # ── Phase 4: Behavior ──
+    # DRY_RUN=true (default) — every destructive action is a no-op that logs
+    # "would have done X". Safe to run anywhere. Set false only for live demos.
+    dry_run: bool = True
+    # When true, kubectl_patch remediations wait for Slack emoji-reaction approval
+    # before executing. Ignored in dry_run mode.
+    require_slack_approval_for_patches: bool = True
+    # How long to poll for Slack approval before timing out (seconds).
+    slack_approval_timeout_seconds: int = 300
+    # When true, RealToolkit is used instead of MockToolkit.
+    # Requires github_token, slack_bot_token, and a reachable kubeconfig.
+    agent_use_real_tools: bool = False
+
+    # ── Phase 4: Safety ──
+    # Hard namespace allowlist — apply_remediation rejects any namespace not listed.
+    allowed_namespaces: list[str] = ["kubesentinel", "kubesentinel-demo"]
+    # Agent-created PRs always target this branch, never main.
+    pr_target_branch: str = "develop"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

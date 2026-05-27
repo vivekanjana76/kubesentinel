@@ -110,3 +110,24 @@ def build_graph(
     builder.add_edge("report", END)
 
     return builder.compile()
+
+
+def get_default_toolkit(alert_name: str = "unknown") -> Toolkit:
+    """Return the appropriate toolkit based on settings.
+
+    When AGENT_USE_REAL_TOOLS=true, returns a RealToolkit built from
+    environment credentials. When false (default), returns MockToolkit
+    with the OOMKilled scenario — safe for CLI demos without live services.
+
+    Raises RuntimeError (with instructions to run verify-tools) if
+    AGENT_USE_REAL_TOOLS=true but any service fails to authenticate.
+    """
+    from agent.settings import settings  # noqa: PLC0415
+    from agent.tools.mocks import MockToolkit  # noqa: PLC0415
+
+    if settings.agent_use_real_tools:
+        from agent.tools.real import build_real_toolkit  # noqa: PLC0415
+
+        return build_real_toolkit(settings, alert_name=alert_name)
+
+    return MockToolkit(scenario="OOMKilled")

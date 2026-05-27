@@ -20,7 +20,8 @@ def test_imagepullbackoff_diagnosis_targets_deployment_or_image(
         ),
         proposed_fix=ProposedFix(
             type="config_update",
-            target="deployment/sacrificial -n kubesentinel",
+            namespace="kubesentinel",
+            target="deployment/sacrificial",
             description="Roll back the image tag in the deployment to the last known good version.",
             command_or_diff="kubectl set image deployment/sacrificial app=myregistry.io/myapp:v2.3.0",
         ),

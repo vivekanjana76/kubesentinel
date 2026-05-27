@@ -78,7 +78,7 @@ py -3.12 -m agent.cli demo --scenario OOMKilled
 | LangGraph nodes | 8 | receive_alert, investigate, search_history, reason, prepare_retry, remediate, escalate, report |
 | Conditional routes | 3 | remediate (conf >= 0.7), prepare_retry (conf < 0.4 + retries), escalate (fallback) |
 
-> Measured with MockToolkit (deterministic tool mocks) + real Llama 3.3 70B via OpenRouter. Live-mode timing depends on cluster + GitHub + Slack roundtrips. See [docs/metrics.md](docs/metrics.md) for methodology and raw data.
+> **Why ~4 minutes?** The `reason` node makes 1–3 LLM calls to OpenRouter's **free tier**, where upstream providers throttle requests aggressively (~55s per call). With a paid API key or self-hosted model, MTTR drops to single-digit seconds — the agent's own logic (tool calls, RAG retrieval, graph traversal) completes in under 5 seconds. See [docs/metrics.md](docs/metrics.md) for full methodology, per-node breakdown, and raw data.
 
 ---
 
